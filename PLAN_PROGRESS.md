@@ -133,6 +133,7 @@ Docker Desktop 中的 `tpu-env` 和 `convert_yolov5_to_cvimodel.sh` 保持独立
 - 测试 ONNX：`runs/export/maixcam_test/best.onnx`。
 - Docker 副本：`D:/docker_data/models/best.onnx`。
 - Docker 校准输入：10 张 `test*.jpg` 和 197 张 `images/` 图片。
+- Docker 量化测试：已使用上述 ONNX 在 `tpu-env` 中完成测试，结果成功。
 - 本地新根提交：`48ee934`。
 - 旧整理提交备份：`backup-before-history-rewrite`。
 - 原始历史备份：`before-local-cleanup`。
