@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import codecs
+import os
 import random
 import re
 import shutil
@@ -12,6 +14,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = Path(__file__).resolve()
+NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+TRAIN_PROGRESS = re.compile(
+    rf"^\s*(\d+/\d+)\s+(\S+)\s+({NUMBER})\s+({NUMBER})\s+"
+    rf"({NUMBER})\s+(\d+)\s+(\d+):"
+)
+METRIC_LINE = re.compile(
+    rf"^\s*(\S+)\s+(\d+)\s+(\d+)\s+({NUMBER})\s+({NUMBER})\s+"
+    rf"({NUMBER})\s+({NUMBER})\s*$"
+)
+MODEL_ROW = re.compile(r"^\s*\d+\s+-?\d+\s+\d+\s+\S+")
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -39,6 +52,113 @@ def image_files(path):
         for p in path.rglob("*")
         if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp"}
     )
+
+
+def format_output_line(line):
+    """将训练输出转换为紧凑的状态行。"""
+    line = ANSI_ESCAPE.sub("", line).strip()
+    if not line:
+        return ""
+    match = TRAIN_PROGRESS.match(line)
+    if match:
+        epoch, gpu, box, obj, cls, instances, size = match.groups()
+        return (
+            f"Epoch {epoch} | GPU {gpu} | box {box} | obj {obj} | "
+            f"cls {cls} | instances {instances} | size {size}"
+        )
+
+    match = METRIC_LINE.match(line)
+    if match:
+        name, images, instances, precision, recall, map50, map95 = match.groups()
+        return (
+            f"Val {name} | images {images} | instances {instances} | "
+            f"P {precision} | R {recall} | mAP50 {map50} | mAP50-95 {map95}"
+        )
+
+    if "%|" in line and "Scanning" in line:
+        return line.split("%|", 1)[0].strip() + "% 完成"
+    if "%|" in line:
+        return None
+    if line.startswith("TRAIN_WEIGHTS="):
+        return f"训练权重: {line.split('=', 1)[1]}"
+    if line.startswith("ONNX="):
+        return f"ONNX: {line.split('=', 1)[1]}"
+    if line.startswith("DOCKER_COPY="):
+        return f"Docker 输入目录: {line.split('=', 1)[1]}"
+    if line.startswith("Epoch") and "GPU_mem" in line:
+        return ""
+    if line.startswith(("github:", "Comet:", "TensorBoard:")):
+        return ""
+    if line.startswith("from") and "params" in line:
+        return ""
+    if MODEL_ROW.match(line):
+        return ""
+    return line
+
+
+def stream_process(command):
+    """运行子进程并整理其标准输出，返回退出码和完整文本。"""
+    environment = os.environ.copy()
+    environment["PYTHONIOENCODING"] = "utf-8"
+    process = subprocess.Popen(
+        command,
+        cwd=ROOT,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    assert process.stdout is not None
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    pending = ""
+    output = []
+    active_width = 0
+    active_line = False
+
+    def emit(raw_line, ending):
+        nonlocal active_line, active_width
+        if raw_line:
+            output.append(raw_line)
+        formatted = format_output_line(raw_line)
+        if formatted == "":
+            if ending == "\n" and active_line:
+                sys.stdout.write("\n")
+                active_line = False
+                active_width = 0
+            return
+        if formatted is None:
+            if ending == "\n" and active_line:
+                sys.stdout.write("\n")
+                active_line = False
+                active_width = 0
+            if formatted is None and raw_line and "%|" not in raw_line:
+                print(raw_line, flush=True)
+            return
+        padding = max(0, active_width - len(formatted))
+        sys.stdout.write("\r" + formatted + " " * padding)
+        active_line = True
+        active_width = max(active_width, len(formatted))
+        if ending == "\n":
+            sys.stdout.write("\n")
+            active_line = False
+            active_width = 0
+        sys.stdout.flush()
+
+    while chunk := process.stdout.read(4096):
+        text = decoder.decode(chunk)
+        for character in text:
+            if character in "\r\n":
+                emit(pending, character)
+                pending = ""
+            else:
+                pending += character
+    pending += decoder.decode(b"", final=True)
+    if pending:
+        emit(pending, "\n")
+    if active_line:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+    process.wait()
+    return process.returncode, "\n".join(output)
 
 
 def dataset_source(dataset_path):
@@ -178,23 +298,9 @@ def run_orchestrator(config_path):
         str(config_path),
     ]
     print("[1/2] 开始训练（.trainenv）", flush=True)
-    train_process = subprocess.Popen(
-        train_command,
-        cwd=ROOT,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        bufsize=1,
-    )
-    train_lines = []
-    assert train_process.stdout is not None
-    for line in train_process.stdout:
-        print(line, end="", flush=True)
-        train_lines.append(line)
-    train_process.wait()
-    train_output = "".join(train_lines)
-    if train_process.returncode:
-        raise SystemExit(train_process.returncode)
+    train_code, train_output = stream_process(train_command)
+    if train_code:
+        raise SystemExit(train_code)
     match = re.search(r"^TRAIN_WEIGHTS=(.+)$", train_output, re.MULTILINE)
     if not match:
         raise RuntimeError("training finished but no TRAIN_WEIGHTS marker was returned")
@@ -211,8 +317,10 @@ def run_orchestrator(config_path):
         match.group(1).strip(),
     ]
     print("[2/2] 开始导出 MaixCam ONNX（.exportenv）", flush=True)
-    export_result = subprocess.run(export_command, cwd=ROOT, text=True)
-    raise SystemExit(export_result.returncode)
+    export_code, _ = stream_process(export_command)
+    if export_code == 0:
+        print("[完成] 训练、导出和 Docker 输入准备已完成。", flush=True)
+    raise SystemExit(export_code)
 
 
 def main():
