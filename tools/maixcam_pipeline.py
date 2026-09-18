@@ -1,4 +1,4 @@
-"""Run the MaixCam train/export workflow from VSCode's Run Code action."""
+"""通过 VSCode 的 Run Code 执行 MaixCam 训练和导出流程。"""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
 
 
 def load_config(path):
+    """读取 YAML 工作流配置，并记录配置文件的绝对路径。"""
     import yaml
 
     with path.open(encoding="utf-8") as stream:
@@ -26,11 +27,13 @@ def load_config(path):
 
 
 def resolve(value, base=ROOT):
+    """将配置中的相对路径按照指定根目录解析为绝对路径。"""
     path = Path(str(value))
     return path if path.is_absolute() else (base / path).resolve()
 
 
 def image_files(path):
+    """按稳定顺序返回目录下支持的图片文件。"""
     return sorted(
         p
         for p in path.rglob("*")
@@ -39,6 +42,7 @@ def image_files(path):
 
 
 def dataset_source(dataset_path):
+    """从 YOLO 数据集 YAML 中读取训练图片目录。"""
     dataset = load_config(dataset_path)
     source = dataset.get("train")
     if isinstance(source, list):
@@ -47,6 +51,7 @@ def dataset_source(dataset_path):
 
 
 def trained_weights(project, name):
+    """查找指定训练任务的 best.pt，找不到时返回最新结果。"""
     expected = resolve(project) / name / "weights" / "best.pt"
     if expected.exists():
         return expected
@@ -59,6 +64,7 @@ def trained_weights(project, name):
 
 
 def prepare_docker(config, onnx):
+    """将 ONNX 和校准图片复制到 Docker 共享目录。"""
     spec = config.get("docker", {})
     directory_value = spec.get("directory")
     if not directory_value:
@@ -91,6 +97,7 @@ def prepare_docker(config, onnx):
 
 
 def worker_train(config_path):
+    """在 .trainenv 环境中执行训练阶段。"""
     config = load_config(config_path)
     base = ROOT
     train_spec = dict(config.get("train", {}))
@@ -120,6 +127,7 @@ def worker_train(config_path):
 
 
 def worker_export(config_path, weights_path):
+    """在 .exportenv 环境中执行 MaixCam ONNX 导出阶段。"""
     config = load_config(config_path)
     weights = resolve(weights_path, ROOT)
     if not weights.exists():
@@ -150,6 +158,7 @@ def worker_export(config_path, weights_path):
 
 
 def run_orchestrator(config_path):
+    """分别启动训练和导出子进程，并实时转发训练日志。"""
     train_python = ROOT / ".trainenv" / "Scripts" / "python.exe"
     convert_python = ROOT / ".exportenv" / "Scripts" / "python.exe"
     for interpreter in (train_python, convert_python):
@@ -206,6 +215,7 @@ def run_orchestrator(config_path):
 
 
 def main():
+    """解析命令行参数并分派工作流阶段。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config", type=Path, default=ROOT / "configs" / "maixcam.yaml"

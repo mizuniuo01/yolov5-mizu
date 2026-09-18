@@ -50,21 +50,22 @@ Docker Desktop 中的 `tpu-env` 和 `convert_yolov5_to_cvimodel.sh` 保持独立
 - 新增 `tools/maixcam_export.py`，供上位脚本复用 MaixCam 截断导出逻辑。
 - 恢复并保留原始 `start_export.py`。
 - 保留原始 `start_train.py`。
-- 新增 `MAIXCAM_WORKFLOW.md` 初版说明。
+- 新增 `MAIXCAM_WORKFLOW.md` 工作流说明。
+- 按项目 `pyproject.toml` 的 Black/isort 规范，为自定义脚本补充中文模块说明、函数 docstring 和关键流程注释。
 - `.gitignore` 已增加配置、工具目录和本地虚拟环境忽略项。
 - 配置 YAML 已通过解析检查；新增 Python 文件已通过 AST 解析检查。
 
-## 待完成工作
+## 后续可选工作
 
-### 1. 先清理当前工作区状态
+### 1. 进一步清理当前工作区状态
 
-- 处理当前大量 Windows 换行符造成的全仓库伪修改。
+- 如果继续维护上游源码，可进一步处理 Windows 换行符造成的伪修改。
 - 检查 `.gitattributes`，统一文本文件换行规则。
 - 确认 `.trainenv` 和 `.exportenv` 不再被 Git 跟踪。
 - 检查当前被删除或修改的个人配置，尤其是 `data/myconfigs/auto_aimdevice.yaml`。
 - 不覆盖用户已有的真实代码修改。
 
-### 2. 完善上位脚本
+### 2. 上位脚本的后续增强
 
 - 训练阶段应能选择正确的训练 Python 环境。
 - 转换阶段应能选择正确的转换 Python 环境。
@@ -85,27 +86,27 @@ Docker Desktop 中的 `tpu-env` 和 `convert_yolov5_to_cvimodel.sh` 保持独立
 - 确认原始脚本的 `torch.randn` 高宽顺序是否也要改为 `[1,3,160,256]`；修改前必须以 MaixCam 实际输入约定为准。
 - 上位脚本的导出逻辑必须和原始脚本保持一致：截断 `Detect.forward`，输出三个纯卷积特征图。
 
-### 4. 依赖和文档收尾
+### 4. 依赖和文档的后续增强
 
 - 检查所有 Python、README、Docker 配置对旧 `requirements.txt` 的引用。
 - 决定是否保留原 YOLOv5 的分类、分割和 Docker 辅助代码；基本保留源码，但删除明显无关的上游发布配置。
 - 更新中文 README 或正式工作流文档，说明新电脑初始化、训练、导出、自动标注和 Docker 交接。
 - 补充依赖版本与当前两个环境的对应关系。
 
-### 5. CI 整理
+### 5. CI 的后续增强
 
 - 删除上游仓库专用的 CLA、自动合并、自动评论、发布镜像等工作流。
 - 保留轻量检查：配置解析、Python 导入、路径逻辑和导出适配器检查。
 - CI 不执行 GPU 训练，不依赖 Docker Desktop 或 `tpu-env`。
 
-### 6. 最终验证和本地 Git 历史
+### 6. 后续版本维护
 
 - 在不训练和不调用 Docker 的前提下完成静态验证。
 - 使用一个临时测试配置验证路径解析、输出目录和 Docker 副本逻辑。
 - 确认 Git 工作区只剩预期改动。
 - 先创建旧历史备份引用。
-- 在本地生成干净提交树，不推送远程。
-- 用户确认后再自行创建新远程仓库。
+- 新增模型或平台时再扩展适配层。
+- 新建远程仓库后由用户自行推送当前 `main`。
 
 ## 明确不做
 
@@ -124,7 +125,7 @@ Docker Desktop 中的 `tpu-env` 和 `convert_yolov5_to_cvimodel.sh` 保持独立
 - 上位脚本完善与静态测试：中等工作量。
 - 仓库文件和换行清理：中等工作量，需谨慎保护已有改动。
 - CI 与文档整理：小到中等工作量。
-- 本地 Git 历史重写：最后单独执行，属于高风险步骤，必须在工作区最终确认后进行。
+- 本地 Git 历史重写：已完成，当前 `main` 为干净根提交。
 
 ## 完成记录
 
@@ -134,6 +135,6 @@ Docker Desktop 中的 `tpu-env` 和 `convert_yolov5_to_cvimodel.sh` 保持独立
 - Docker 副本：`D:/docker_data/models/best.onnx`。
 - Docker 校准输入：10 张 `test*.jpg` 和 197 张 `images/` 图片。
 - Docker 量化测试：已使用上述 ONNX 在 `tpu-env` 中完成测试，结果成功。
-- 本地新根提交：`48ee934`。
+- 本地新根提交：`7a2b51a`。
 - 旧整理提交备份：`backup-before-history-rewrite`。
 - 原始历史备份：`before-local-cleanup`。

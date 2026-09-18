@@ -1,4 +1,4 @@
-"""MaixCam-specific YOLOv5 export: expose Detect head feature maps."""
+"""导出 MaixCam 所需的 YOLOv5 原始特征图。"""
 
 from __future__ import annotations
 import types
@@ -9,6 +9,7 @@ from models.yolo import Detect
 
 
 def custom_forward(self, x):
+    """跳过 Detect 后处理，直接返回三个卷积特征图。"""
     return tuple(self.m[i](x[i]) for i in range(self.nl))
 
 
@@ -20,6 +21,19 @@ def export_pure(
     opset=12,
     output_names=("out0", "out1", "out2"),
 ):
+    """将 YOLOv5 权重导出为 MaixCam 使用的 ONNX 文件。
+
+    参数:
+        weights_path: 输入的 YOLOv5 权重文件。
+        onnx_path: 输出 ONNX 路径；为空时使用权重文件旁的默认名称。
+        width: 输入图像宽度。
+        height: 输入图像高度。
+        opset: ONNX 算子集版本。
+        output_names: 原始特征图输出名称。
+
+    返回:
+        生成的 ONNX 文件路径。
+    """
     weights_path = Path(weights_path).resolve()
     onnx_path = (
         Path(onnx_path)
