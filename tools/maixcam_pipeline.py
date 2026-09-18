@@ -85,7 +85,8 @@ def prepare_docker(config, onnx):
     sample_count = int(spec.get("sample_count", 10))
     if len(pool) < sample_count:
         raise RuntimeError(
-            f"need {sample_count} sample images, found {len(pool)} in {source}"
+            f"need {sample_count} sample images, "
+            f"found {len(pool)} in {source}"
         )
     for index, image in enumerate(pool[:sample_count]):
         shutil.copy2(image, directory / f"test{index}.jpg")

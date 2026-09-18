@@ -1,9 +1,12 @@
 """导出 MaixCam 所需的 YOLOv5 原始特征图。"""
 
 from __future__ import annotations
+
 import types
 from pathlib import Path
+
 import torch
+
 from models.experimental import attempt_load
 from models.yolo import Detect
 
