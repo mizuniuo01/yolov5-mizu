@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import codecs
 import os
 import random
 import re
@@ -12,21 +11,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tools.terminal_output import WorkflowOutput
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = Path(__file__).resolve()
-NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
-ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-TRAIN_PROGRESS = re.compile(
-    rf"^\s*(\d+/\d+)\s+(\S+)\s+({NUMBER})\s+({NUMBER})\s+"
-    rf"({NUMBER})\s+(\d+)\s+(\d+):\s*(\d+)%\|"
-)
-METRIC_LINE = re.compile(
-    rf"^\s*(\S+)\s+(\d+)\s+(\d+)\s+({NUMBER})\s+({NUMBER})\s+"
-    rf"({NUMBER})\s+({NUMBER})\s*$"
-)
-PROGRESS_LINE = re.compile(r"(?P<pct>\d+)%\|(?P<bar>[^|]*)\|")
-MODEL_ROW = re.compile(r"^\s*\d+\s+(?:-?\d+|\[)")
-PROGRESS_WIDTH = 42
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -56,69 +44,8 @@ def image_files(path):
     )
 
 
-def format_output_line(line):
-    """将训练输出转换为结构化状态行。"""
-    line = ANSI_ESCAPE.sub("", line).strip()
-    if not line:
-        return ""
-    match = TRAIN_PROGRESS.match(line)
-    if match:
-        epoch, gpu, box, obj, cls, instances, size, percent = match.groups()
-        progress = progress_bar(int(percent))
-        return (
-            f"训练 Epoch {epoch} | {progress} {percent:>3}% | "
-            f"GPU_mem {gpu} | box_loss {box} | obj_loss {obj} | "
-            f"cls_loss {cls} | Instances {instances} | Size {size}"
-        )
-
-    match = METRIC_LINE.match(line)
-    if match:
-        name, images, instances, precision, recall, map50, map95 = match.groups()
-        return (
-            f"验证 Class {name} | Images {images} | Instances {instances} | "
-            f"Precision {precision} | Recall {recall} | "
-            f"mAP50 {map50} | mAP50-95 {map95}"
-        )
-
-    match = PROGRESS_LINE.search(line)
-    if match:
-        percent = int(match.group("pct"))
-        if "mAP" in line or "Class" in line:
-            label = "验证"
-        elif "Scanning" in line:
-            label = "扫描"
-        else:
-            label = "处理中"
-        return f"{label:<4} {progress_bar(percent)} {percent:>3}%"
-    if "%|" in line and "Scanning" in line:
-        return line.split("%|", 1)[0].strip() + "% 完成"
-    if "%|" in line:
-        return None
-    if line.startswith("TRAIN_WEIGHTS="):
-        return f"训练权重: {line.split('=', 1)[1]}"
-    if line.startswith("ONNX="):
-        return f"ONNX: {line.split('=', 1)[1]}"
-    if line.startswith("DOCKER_COPY="):
-        return f"Docker 输入目录: {line.split('=', 1)[1]}"
-    if line.startswith("Epoch") and "GPU_mem" in line:
-        return ""
-    if line.startswith(("github:", "Comet:", "TensorBoard:")):
-        return ""
-    if line.startswith("from") and "params" in line:
-        return ""
-    if MODEL_ROW.match(line):
-        return ""
-    return line
-
-
-def progress_bar(percent):
-    """根据百分比生成固定宽度的文本进度条。"""
-    completed = round(PROGRESS_WIDTH * percent / 100)
-    return "[" + "█" * completed + "·" * (PROGRESS_WIDTH - completed) + "]"
-
-
 def stream_process(command):
-    """运行子进程并整理其标准输出，返回退出码和完整文本。"""
+    """运行子进程并通过终端输出渲染器显示状态。"""
     environment = os.environ.copy()
     environment["PYTHONIOENCODING"] = "utf-8"
     environment["PYTHONWARNINGS"] = "ignore::FutureWarning"
@@ -130,55 +57,13 @@ def stream_process(command):
         stderr=subprocess.STDOUT,
     )
     assert process.stdout is not None
-    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-    pending = ""
+    renderer = WorkflowOutput()
     output = []
-    active_width = 0
-    active_line = False
-
-    def emit(raw_line, ending):
-        nonlocal active_line, active_width
-        if raw_line:
-            output.append(raw_line)
-        formatted = format_output_line(raw_line)
-        if formatted == "":
-            if ending == "\n" and active_line:
-                sys.stdout.write("\n")
-                active_line = False
-                active_width = 0
-            return
-        if formatted is None:
-            if ending == "\n" and active_line:
-                sys.stdout.write("\n")
-                active_line = False
-                active_width = 0
-            if formatted is None and raw_line and "%|" not in raw_line:
-                print(raw_line, flush=True)
-            return
-        padding = max(0, active_width - len(formatted))
-        sys.stdout.write("\r" + formatted + " " * padding)
-        active_line = True
-        active_width = max(active_width, len(formatted))
-        if ending == "\n":
-            sys.stdout.write("\n")
-            active_line = False
-            active_width = 0
-        sys.stdout.flush()
-
-    while chunk := process.stdout.read(4096):
-        text = decoder.decode(chunk)
-        for character in text:
-            if character in "\r\n":
-                emit(pending, character)
-                pending = ""
-            else:
-                pending += character
-    pending += decoder.decode(b"", final=True)
-    if pending:
-        emit(pending, "\n")
-    if active_line:
-        sys.stdout.write("\n")
-        sys.stdout.flush()
+    for raw_line in iter(process.stdout.readline, b""):
+        text = raw_line.decode("utf-8", errors="replace")
+        output.append(text.rstrip("\r\n"))
+        renderer.feed(text)
+    renderer.finish()
     process.wait()
     return process.returncode, "\n".join(output)
 
