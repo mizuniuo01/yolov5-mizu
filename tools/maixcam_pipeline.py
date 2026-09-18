@@ -18,13 +18,15 @@ NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 TRAIN_PROGRESS = re.compile(
     rf"^\s*(\d+/\d+)\s+(\S+)\s+({NUMBER})\s+({NUMBER})\s+"
-    rf"({NUMBER})\s+(\d+)\s+(\d+):"
+    rf"({NUMBER})\s+(\d+)\s+(\d+):\s*(\d+)%\|"
 )
 METRIC_LINE = re.compile(
     rf"^\s*(\S+)\s+(\d+)\s+(\d+)\s+({NUMBER})\s+({NUMBER})\s+"
     rf"({NUMBER})\s+({NUMBER})\s*$"
 )
-MODEL_ROW = re.compile(r"^\s*\d+\s+-?\d+\s+\d+\s+\S+")
+PROGRESS_LINE = re.compile(r"(?P<pct>\d+)%\|(?P<bar>[^|]*)\|")
+MODEL_ROW = re.compile(r"^\s*\d+\s+(?:-?\d+|\[)")
+PROGRESS_WIDTH = 42
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -55,26 +57,39 @@ def image_files(path):
 
 
 def format_output_line(line):
-    """将训练输出转换为紧凑的状态行。"""
+    """将训练输出转换为结构化状态行。"""
     line = ANSI_ESCAPE.sub("", line).strip()
     if not line:
         return ""
     match = TRAIN_PROGRESS.match(line)
     if match:
-        epoch, gpu, box, obj, cls, instances, size = match.groups()
+        epoch, gpu, box, obj, cls, instances, size, percent = match.groups()
+        progress = progress_bar(int(percent))
         return (
-            f"Epoch {epoch} | GPU {gpu} | box {box} | obj {obj} | "
-            f"cls {cls} | instances {instances} | size {size}"
+            f"训练 Epoch {epoch} | {progress} {percent:>3}% | "
+            f"GPU_mem {gpu} | box_loss {box} | obj_loss {obj} | "
+            f"cls_loss {cls} | Instances {instances} | Size {size}"
         )
 
     match = METRIC_LINE.match(line)
     if match:
         name, images, instances, precision, recall, map50, map95 = match.groups()
         return (
-            f"Val {name} | images {images} | instances {instances} | "
-            f"P {precision} | R {recall} | mAP50 {map50} | mAP50-95 {map95}"
+            f"验证 Class {name} | Images {images} | Instances {instances} | "
+            f"Precision {precision} | Recall {recall} | "
+            f"mAP50 {map50} | mAP50-95 {map95}"
         )
 
+    match = PROGRESS_LINE.search(line)
+    if match:
+        percent = int(match.group("pct"))
+        if "mAP" in line or "Class" in line:
+            label = "验证"
+        elif "Scanning" in line:
+            label = "扫描"
+        else:
+            label = "处理中"
+        return f"{label:<4} {progress_bar(percent)} {percent:>3}%"
     if "%|" in line and "Scanning" in line:
         return line.split("%|", 1)[0].strip() + "% 完成"
     if "%|" in line:
@@ -96,10 +111,17 @@ def format_output_line(line):
     return line
 
 
+def progress_bar(percent):
+    """根据百分比生成固定宽度的文本进度条。"""
+    completed = round(PROGRESS_WIDTH * percent / 100)
+    return "[" + "█" * completed + "·" * (PROGRESS_WIDTH - completed) + "]"
+
+
 def stream_process(command):
     """运行子进程并整理其标准输出，返回退出码和完整文本。"""
     environment = os.environ.copy()
     environment["PYTHONIOENCODING"] = "utf-8"
+    environment["PYTHONWARNINGS"] = "ignore::FutureWarning"
     process = subprocess.Popen(
         command,
         cwd=ROOT,
