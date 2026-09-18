@@ -9,7 +9,7 @@ from models.yolo import Detect
 
 
 def custom_forward(self, x):
-    """跳过 Detect 后处理，直接返回三个卷积特征图。"""
+    """返回 Detect 模块中三个卷积层的输出。"""
     return tuple(self.m[i](x[i]) for i in range(self.nl))
 
 

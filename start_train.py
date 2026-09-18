@@ -1,4 +1,4 @@
-"""YOLOv5 原始训练入口，请使用 .trainenv 运行。"""
+"""YOLOv5 训练参数与执行入口。"""
 
 import sys
 import os

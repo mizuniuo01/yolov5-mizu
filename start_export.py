@@ -1,4 +1,4 @@
-"""MaixCam 原始导出入口，请使用 .exportenv 运行。"""
+"""MaixCam ONNX 导出参数与执行入口。"""
 
 import sys
 import os
@@ -12,12 +12,12 @@ from models.experimental import attempt_load
 from models.yolo import Detect
 
 
-# 拦截 YOLOv5 的后处理
+# 将 Detect.forward 替换为原始特征图输出函数。
 def custom_forward(self, x):
-    """跳过 Detect 后处理，只返回原始卷积特征图。"""
+    """返回 Detect 模块中三个卷积层的输出。"""
     res = []
     for i in range(self.nl):
-        # 只输出最底层的纯卷积特征图
+        # 读取每个检测尺度对应的卷积层输出。
         res.append(self.m[i](x[i]))
     return tuple(res)
 
@@ -28,8 +28,8 @@ def export_pure():
         current_dir, "runs", "train", "exp2", "weights", "steel_ball.pt"
     )
     print(f"加载模型: {weights_path}")
-    model = attempt_load(weights_path, device="cpu")  # 加载模型到CPU
-    # 评估模式
+    model = attempt_load(weights_path, device="cpu")  # 在 CPU 上加载权重。
+    # 设置为评估模式。
     model.eval()
 
     for m in model.modules():
@@ -37,7 +37,7 @@ def export_pure():
             m.forward = types.MethodType(custom_forward, m)
             print("成功截断 Detect 头")
 
-    dummy_input = torch.randn(1, 3, 256, 160)  # 输入尺寸保持和训练时一致
+    dummy_input = torch.randn(1, 3, 256, 160)  # 创建 ONNX 导出的示例输入。
     onnx_path = weights_path.replace(".pt", "_export.onnx")
 
     print("正在导出ONNX...")
@@ -48,7 +48,7 @@ def export_pure():
         verbose=False,
         opset_version=12,
         input_names=["images"],
-        # 固定命名输出节点，方便后续使用
+        # 设置输出节点名称。
         output_names=["out0", "out1", "out2"],
     )
     print(f"导出完成，模型保存在: {onnx_path}")

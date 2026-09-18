@@ -1,4 +1,4 @@
-"""YOLOv5 自动标注入口，请使用 .trainenv 运行。"""
+"""YOLOv5 自动标注配置与执行入口。"""
 
 import sys
 import os
@@ -8,33 +8,32 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "yolov5"))
 import detect
 
 if __name__ == "__main__":
-    # 自动标注保持独立，不并入训练和导出的上位流程。
-    # 自动标注配置
+    # 自动标注参数。
     detect.run(
-        # 小模型路径
+        # 检测权重路径。
         weights=Path(
             "runs/train/exp/weights/best.pt"
-        ),  # 每次训练完成后都要修改这个路径，指向最新的best.pt
-        # 还没打标签的图片路径
+        ),  # 使用的检测权重文件。
+        # 待标注图片路径。
         source=Path(
             "D:/Study/Datacollect/classified_dataset/all_picturedata/images/train"
-        ),  # 每次新建一个数据集都要修改这个路径，指向需要自动标注的图片文件夹
-        # 配置文件路径
+        ),  # 待标注图片所在目录。
+        # 数据集类别配置路径。
         data=Path(
             "D:/Study/Python/YOLOv5/yolov5/data/myconfigs/auto_aimdevice.yaml"
-        ),  # 每次新建一个数据集都要修改这个路径
-        imgsz=(320, 320),  # 保持和训练时一样的分辨率
-        conf_thres=0.5,  # 置信度阈值
-        iou_thres=0.45,  # NMS重叠过滤阈值
-        save_txt=True,  # 开启保存 TXT 标签文件（YOLO格式）
-        save_conf=False,  # 标签中不要包含置信度
-        nosave=True,  # False表示同时保存画好框的图片（方便你肉眼快速检查），True表示只存txt不存图
-        # 输出路径设置
+        ),  # 类别数量和类别名称配置。
+        imgsz=(320, 320),  # 推理输入尺寸。
+        conf_thres=0.5,  # 置信度阈值。
+        iou_thres=0.45,  # NMS 的 IoU 阈值。
+        save_txt=True,  # 保存 YOLO 格式标签。
+        save_conf=False,  # 不在标签中保存置信度。
+        nosave=True,  # 不保存带检测框的图片。
+        # 输出目录设置。
         project=Path(
             "runs/auto_label"
-        ),  # 自动标注的结果会保存在 runs/auto_label/exp 下
+        ),  # 自动标注结果目录。
         name="exp",
-        exist_ok=True,  # 允许覆盖同名文件夹
+        exist_ok=True,  # 允许使用已存在的输出目录。
     )
 
     print("\n 自动标注完成！")
