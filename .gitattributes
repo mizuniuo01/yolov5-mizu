@@ -1,0 +1,3 @@
+# Keep repository text stable across Windows and WSL.
+* text=auto eol=lf
+*.ipynb linguist-vendored

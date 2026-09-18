@@ -1,0 +1,5 @@
+train: D:/Study/Datacollect/classified_dataset/for_auto_label/images/train
+val: D:/Study/Datacollect/classified_dataset/for_auto_label/images/val
+
+nc: 1
+names: ['target']

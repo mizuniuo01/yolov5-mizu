@@ -1,0 +1,30 @@
+name: Project checks
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install configuration checker
+        run: python -m pip install pyyaml
+      - name: Parse project Python files
+        run: |
+          python -c "import ast, pathlib; files=['tools/maixcam_pipeline.py','tools/maixcam_export.py','start_train.py','start_export.py','auto_label.py']; [ast.parse(p.read_text(encoding='utf-8'), filename=str(p)) for p in map(pathlib.Path, files)]"
+      - name: Validate MaixCam configuration
+        run: |
+          python -c "import yaml; c=yaml.safe_load(open('configs/maixcam.yaml')); assert c['export']['output_names']==['out0','out1','out2']; assert c['export']['width']==256 and c['export']['height']==160"
+      - name: Check workflow entry point
+        run: python tools/maixcam_pipeline.py --help

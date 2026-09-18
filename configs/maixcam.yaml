@@ -1,0 +1,25 @@
+dataset: data/myconfigs/testdata.yaml
+weights: yolov5s.pt
+train:
+  imgsz: 320
+  batch_size: -1
+  epochs: 1
+  device: "0"
+  workers: 2
+  cache: null
+  project: runs/train
+  name: maixcam_test
+  exist_ok: true
+export:
+  width: 256
+  height: 160
+  opset: 12
+  output_names: [out0, out1, out2]
+  project: runs/export
+  name: maixcam_test
+docker:
+  directory: D:/docker_data/models
+  model_name: null
+  sample_count: 10
+  calibration_count: 200
+  source: null
