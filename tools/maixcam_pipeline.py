@@ -11,12 +11,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tools.terminal_output import WorkflowOutput
-
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = Path(__file__).resolve()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+from tools.terminal_output import WorkflowOutput
 
 
 def load_config(path):
