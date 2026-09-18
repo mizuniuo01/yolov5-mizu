@@ -1,15 +1,25 @@
+# 数据集配置和初始权重。
 dataset: data/myconfigs/testdata.yaml
 weights: yolov5s.pt
+
+# 训练参数。
+# 正式训练时重点调整 imgsz、epochs、device 和 name。
 train:
   imgsz: 320
+  # -1：根据 GPU 显存自动选择。
   batch_size: -1
+  # 当前值用于流程测试。
   epochs: 1
+  # "0"：第一块 GPU；"cpu"：使用 CPU。
   device: "0"
   workers: 2
   cache: null
   project: runs/train
   name: maixcam_test
   exist_ok: true
+
+# MaixCam ONNX 导出参数。
+# width、height 和 output_names 必须与量化脚本保持一致。
 export:
   width: 256
   height: 160
@@ -17,9 +27,14 @@ export:
   output_names: [out0, out1, out2]
   project: runs/export
   name: maixcam_test
+
+# Docker 输入准备参数。
+# 脚本只复制 ONNX 和校准图片，不执行 Docker 量化。
 docker:
   directory: D:/docker_data/models
+  # null：使用导出权重文件名；也可手动指定模型名。
   model_name: null
   sample_count: 10
   calibration_count: 200
+  # null：读取 dataset 中的 train 路径。
   source: null
